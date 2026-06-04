@@ -2,23 +2,41 @@ using UnityEngine;
 
 public class LobeData : MonoBehaviour
 {
-    public GameObject textPanel; 
-    public AudioSource audioSource; 
-    public ParticleSystem sparks; 
+    [Header("Information")]
+    public string lobeName = "Brain Part";
+    [TextArea(3, 5)] 
+    public string lobeDescription = "Description goes here.";
 
-    public bool audioModeActive = true;
-    public bool textModeActive = true;
+    [Header("Media")]
+    public AudioSource audioSource;
+    public ParticleSystem sparks;
+    
+    private Renderer meshRenderer;
+    private Color originalColor;
 
-    public void OnLobeTapped()
+    void Awake()
     {
-        Handheld.Vibrate();
-        
-        if (textPanel != null) {
-            textPanel.SetActive(textModeActive);
-            textPanel.transform.LookAt(textPanel.transform.position + Camera.main.transform.rotation * Vector3.forward, Camera.main.transform.rotation * Vector3.up);
-        }
-        
-        if (audioModeActive && audioSource != null) audioSource.Play();
+        meshRenderer = GetComponentInChildren<Renderer>();
+        if (meshRenderer != null) originalColor = meshRenderer.material.color;
+    }
+
+    public void SelectLobe()
+    {
+        if (meshRenderer != null) meshRenderer.material.color = new Color(0.2f, 0.8f, 1f, 1f); 
         if (sparks != null) sparks.Play();
+        Handheld.Vibrate();
+    }
+
+    public void DeselectLobe()
+    {
+        if (meshRenderer != null) meshRenderer.material.color = originalColor;
+        if (audioSource != null) audioSource.Stop();
+    }
+
+    public void ToggleAudio()
+    {
+        if (audioSource == null) return;
+        if (audioSource.isPlaying) audioSource.Stop();
+        else audioSource.Play();
     }
 }

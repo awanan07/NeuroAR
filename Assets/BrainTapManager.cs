@@ -1,31 +1,90 @@
 using UnityEngine;
+using UnityEngine.InputSystem.EnhancedTouch;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 public class BrainTapManager : MonoBehaviour
 {
-    public bool canTap = false; 
+    public bool canTap = false;
+    public LobeData selectedLobe = null; 
+
     private Vector2 touchStartPos;
-    private float tapThreshold = 20f; // Math logic: If the finger moved >20 pixels, it's a rotation swipe, NOT a tap.
+    private float tapThresholdPixels; 
+    private Camera mainCam;
+
+    void Awake()
+    {
+        mainCam = Camera.main;
+        
+        // Calculate physical DPI threshold (0.15 inches)
+        float dpi = Screen.dpi;
+        if (dpi == 0) dpi = 160f; // Fallback for editor or unknown devices
+        tapThresholdPixels = 0.15f * dpi;
+    }
 
     void Update()
     {
-        if (!canTap || Input.touchCount != 1) return;
-        
-        Touch touch = Input.GetTouch(0);
+        if (!canTap) return;
 
-        if (touch.phase == TouchPhase.Began)
+        bool hasInput = false;
+        Vector2 currentScreenPos = Vector2.zero;
+        bool isBegan = false;
+        bool isEnded = false;
+
+        if (Touch.activeTouches.Count > 0)
         {
-            touchStartPos = touch.position;
+            var touch = Touch.activeTouches[0];
+            hasInput = true;
+            currentScreenPos = touch.screenPosition;
+            isBegan = (touch.phase == TouchPhase.Began);
+            isEnded = (touch.phase == TouchPhase.Ended);
         }
-        else if (touch.phase == TouchPhase.Ended)
+        else if (UnityEngine.InputSystem.Mouse.current != null)
         {
-            // Calculates the mathematical vector distance between touch start and end
-            if (Vector2.Distance(touchStartPos, touch.position) < tapThreshold)
+            var mouse = UnityEngine.InputSystem.Mouse.current;
+            if (mouse.leftButton.wasPressedThisFrame || mouse.leftButton.wasReleasedThisFrame || mouse.leftButton.isPressed)
             {
-                Ray ray = Camera.main.ScreenPointToRay(touch.position);
-                if (Physics.Raycast(ray, out RaycastHit hit))
+                hasInput = true;
+                currentScreenPos = mouse.position.ReadValue();
+                isBegan = mouse.leftButton.wasPressedThisFrame;
+                isEnded = mouse.leftButton.wasReleasedThisFrame;
+            }
+        }
+
+        if (!hasInput) return;
+
+        if (isBegan)
+        {
+            touchStartPos = currentScreenPos;
+        }
+        else if (isEnded)
+        {
+            float swipeDist = (currentScreenPos - touchStartPos).magnitude;
+
+            if (swipeDist < tapThresholdPixels) 
+            {
+                ProcessTap(currentScreenPos);
+            }
+        }
+    }
+
+    private void ProcessTap(Vector2 screenPos)
+    {
+        Ray ray = mainCam.ScreenPointToRay(screenPos);
+        if (Physics.Raycast(ray, out RaycastHit hit))
+        {
+            if (hit.collider.TryGetComponent(out LobeData tappedLobe))
+            {
+                if (selectedLobe != null && selectedLobe != tappedLobe)
                 {
-                    hit.collider.GetComponent<LobeData>()?.OnLobeTapped();
+                    selectedLobe.DeselectLobe();
                 }
+
+                selectedLobe = tappedLobe;
+                selectedLobe.SelectLobe();
+                
+                // Sync the 2D UI with the newly tapped lobe
+                FindFirstObjectByType<AppFlowManager>()?.UpdateTextIfOpen();
             }
         }
     }

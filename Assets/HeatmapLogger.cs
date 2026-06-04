@@ -1,9 +1,14 @@
 using System.IO;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.InputSystem.EnhancedTouch;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 public class HeatmapLogger : MonoBehaviour
 {
     private string filePath;
+    private static bool isWriting = false;
 
     void Start()
     {
@@ -13,15 +18,38 @@ public class HeatmapLogger : MonoBehaviour
 
     void Update()
     {
-        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
+        if (Touch.activeTouches.Count > 0)
         {
-            // Mathematically normalize coordinates (0.0 to 1.0) so data matches across all phone sizes
-            Vector2 touchPos = Input.GetTouch(0).position;
-            float normalizedX = touchPos.x / Screen.width;
-            float normalizedY = touchPos.y / Screen.height;
+            var activeTouch = Touch.activeTouches[0];
+            if (activeTouch.phase == TouchPhase.Began)
+            {
+                // Mathematically normalize coordinates (0.0 to 1.0) so data matches across all phone sizes
+                Vector2 touchPos = activeTouch.screenPosition;
+                float normalizedX = touchPos.x / Screen.width;
+                float normalizedY = touchPos.y / Screen.height;
 
-            string data = $"{normalizedX},{normalizedY},{Time.time}\n";
-            File.AppendAllText(filePath, data);
+                string data = $"{normalizedX},{normalizedY},{Time.time}\n";
+                WriteDataAsync(data);
+            }
+        }
+    }
+
+    private async void WriteDataAsync(string data)
+    {
+        // Simple async lock to avoid concurrent file access conflicts without blocking main thread
+        while (isWriting) await Task.Yield();
+        
+        isWriting = true;
+        try
+        {
+            using (StreamWriter writer = new StreamWriter(filePath, true))
+            {
+                await writer.WriteAsync(data);
+            }
+        }
+        finally
+        {
+            isWriting = false;
         }
     }
 }
